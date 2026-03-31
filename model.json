@@ -1,0 +1,15 @@
+{
+  "humanoid": {
+    "scale": 1.0,
+    "height": 1.8,
+    "torso": [0.6, 0.9, 0.3],
+    "head": [0.35, 0.35, 0.35],
+    "headColor": 16755200,
+    "arm": [0.18, 0.7, 0.18],
+    "leg": [0.22, 0.9, 0.22],
+    "color": 4473924
+  },
+  "weapons": {
+    "rifle": { "damage": 30, "fireRate": 0.2, "mag": 30 }
+  }
+}
