@@ -2,441 +2,332 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>The Aim - Ultimate City</title>
+    <title>The Aim - Ultimate FPS Engine</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
-        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background-color: #0fff0f; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 5px #0fff0f; }
-        #hud { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px black; font-size: 28px; font-weight: bold; }
-        #hit-marker { position: absolute; top: 50%; left: 50%; color: red; font-size: 30px; transform: translate(-50%, -50%); display: none; }
-        #damage-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, transparent 40%, rgba(255,0,0,0.6) 100%); opacity: 0; transition: opacity 0.1s; }
-        #menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 10, 15, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; color: white; }
-        #menu h1 { font-size: 80px; margin: 0 0 30px 0; color: #00aaff; text-shadow: 0 0 20px #00aaff; letter-spacing: 8px; }
-        #start-btn { padding: 15px 60px; font-size: 24px; font-weight: bold; background: #00aaff; border: none; border-radius: 5px; color: white; cursor: pointer; transition: 0.3s; box-shadow: 0 0 15px #00aaff; }
-        #start-btn:hover { background: #0088cc; transform: scale(1.1); box-shadow: 0 0 30px #00aaff; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Arial', sans-serif; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; border: 2px solid #0f0; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        #hud { position: absolute; bottom: 30px; left: 30px; color: #0f0; font-family: monospace; font-size: 24px; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+        #damage-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: red; opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+        #menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #222, #000); display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; }
+        #menu h1 { font-size: 100px; margin-bottom: 10px; color: #0af; text-transform: uppercase; letter-spacing: 10px; }
+        button { padding: 20px 60px; font-size: 30px; background: #0af; border: none; color: white; cursor: pointer; border-radius: 50px; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #0df; transform: scale(1.1); box-shadow: 0 0 30px #0af; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 </head>
 <body>
     <div id="game-container"></div>
-    <div id="ui-layer">
-        <div id="damage-overlay"></div>
-        <div id="crosshair"></div>
-        <div id="hit-marker">✖</div>
-        <div id="hud">HP: <span id="hp-val">100</span> | ALIVE: <span id="bot-count">10</span></div>
-    </div>
+    <div id="crosshair"></div>
+    <div id="damage-flash"></div>
+    <div id="hud">HP: 100 | ENEMIES: 9</div>
     <div id="menu">
-        <h1>THE AIM</h1>
-        <button id="start-btn">DEPLOY TO CITY</button>
-        <p style="margin-top: 20px; color: #888;">WASD: Move | SPACE: Jump | CLICK: Shoot<br>Bots will fight everyone, including each other.</p>
+        <h1>The Aim</h1>
+        <p>3D URBAN WARFARE SIMULATOR</p>
+        <button id="play-btn">START MISSION</button>
     </div>
 
     <script>
-        let camera, scene, renderer, controls;
-        let objects = []; // 衝突判定用のマップ構造物
+        let scene, camera, renderer, controls, raycaster;
+        let objects = []; // 壁・床などの衝突判定用メッシュ
         let bots = [];
-        let spawnPoints = []; // 各ビルの各階の中心点
-        let raycaster, visionRaycaster;
+        let playerHP = 100;
+        let isGameRunning = false;
         
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let canJump = false;
-        let prevTime = performance.now();
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
-        
-        let playerHP = 100;
-        let isGameActive = false;
-        let botConfig = null;
+        let prevTime = performance.now();
 
-        const FLOOR_HEIGHT = 15; // 1階層の高さ
+        // 衝突判定用定数
+        const PLAYER_RADIUS = 2.0;
 
         init();
         animate();
 
         async function init() {
+            // Scene Setup
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x112233); // 夜の街風
-            scene.fog = new THREE.FogExp2(0x112233, 0.002);
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 0, 800);
 
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 1000);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
             
-            // ライト設定
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444455, 0.4);
-            hemiLight.position.set(0, 500, 0);
-            scene.add(hemiLight);
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-            dirLight.position.set(100, 300, 100);
-            scene.add(dirLight);
+            // Lighting
+            const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+            sun.position.set(100, 200, 100);
+            scene.add(sun);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
             document.getElementById('game-container').appendChild(renderer.domElement);
 
             controls = new THREE.PointerLockControls(camera, document.body);
-            document.getElementById('start-btn').addEventListener('click', () => controls.lock());
-            controls.addEventListener('lock', () => { document.getElementById('menu').style.display = 'none'; isGameActive = true; });
-            controls.addEventListener('unlock', () => { document.getElementById('menu').style.display = 'flex'; isGameActive = false; });
-
-            document.addEventListener('keydown', onKeyDown);
-            document.addEventListener('keyup', onKeyUp);
-            document.addEventListener('mousedown', shoot);
+            document.getElementById('play-btn').addEventListener('click', () => controls.lock());
+            controls.addEventListener('lock', () => { document.getElementById('menu').style.display = 'none'; isGameRunning = true; });
+            controls.addEventListener('unlock', () => { document.getElementById('menu').style.display = 'flex'; isGameRunning = false; });
 
             raycaster = new THREE.Raycaster();
-            visionRaycaster = new THREE.Raycaster();
+
+            // Load Map & Build
+            const mapRes = await fetch('map.json');
+            const mapData = await mapRes.json();
+            buildCity(mapData);
+
+            // Spawn Bots
+            for(let i=0; i<9; i++) spawnBot(i);
+
+            // Initial Player Position
+            camera.position.set(200, 10, 200);
 
             window.addEventListener('resize', onWindowResize);
-
-            // データ読み込みとマップ構築
-            await loadDataAndBuild();
+            document.addEventListener('keydown', (e) => handleKey(e.code, true));
+            document.addEventListener('keyup', (e) => handleKey(e.code, false));
+            document.addEventListener('mousedown', shoot);
         }
 
-        async function loadDataAndBuild() {
-            try {
-                const botRes = await fetch('bot.json');
-                const botData = await botRes.json();
-                botConfig = botData.behaviors.standard;
-
-                const mapRes = await fetch('map.json');
-                const mapData = await mapRes.json();
-                
-                buildCity(mapData);
-            } catch (e) {
-                console.error("Failed to load JSON (CORS issue?). Generating fallback city...", e);
-                // JSONが読めない場合のフォールバック（最低限のテストデータ）
-                botConfig = { hp: 100, speed: 12, visionRange: 150, fireRate: 800, accuracy: 0.6, roamChangeInterval: 3000 };
-                buildCity({ worldSize: 400, buildings: [{ type: "skyscraper", x: 0, z: 0, floors: 5, width: 40, depth: 40 }, { type: "house", x: 100, z: 100, floors: 2, width: 20, depth: 20 }] });
-            }
-
-            // スポーン処理 (プレイヤー)
-            spawnEntity(camera, true);
-
-            // ボットの生成
-            for(let i=0; i<10; i++) {
-                spawnBot(i);
-            }
-        }
-
-        // --- 街とビルのプロシージャル生成 ---
-        function buildCity(mapData) {
+        function buildCity(data) {
             // 地面
-            const groundGeo = new THREE.PlaneGeometry(mapData.worldSize, mapData.worldSize);
-            const groundMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-            const ground = new THREE.Mesh(groundGeo, groundMat);
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(2000, 2000),
+                new THREE.MeshLambertMaterial({ color: 0x556655 })
+            );
             ground.rotation.x = -Math.PI / 2;
             scene.add(ground);
             objects.push(ground);
 
-            const wallMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-            const floorMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-            const stairMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
-
-            mapData.buildings.forEach(b => {
-                const halfW = b.width / 2;
-                const halfD = b.depth / 2;
-
-                for (let f = 0; f < b.floors; f++) {
-                    const yBase = f * FLOOR_HEIGHT;
-                    
-                    // スポーン位置を登録
-                    spawnPoints.push(new THREE.Vector3(b.x, yBase + 2, b.z));
-
-                    // 床
-                    if (f > 0) {
-                        const floorGeo = new THREE.BoxGeometry(b.width, 1, b.depth);
-                        const floor = new THREE.Mesh(floorGeo, floorMat);
-                        floor.position.set(b.x, yBase, b.z);
-                        scene.add(floor);
-                        objects.push(floor);
-                    }
-
-                    // 外壁 (簡易的に4枚の壁)
-                    const wallGeoTB = new THREE.BoxGeometry(b.width, FLOOR_HEIGHT, 2);
-                    const wallGeoLR = new THREE.BoxGeometry(2, FLOOR_HEIGHT, b.depth - 2);
-
-                    const wallN = new THREE.Mesh(wallGeoTB, wallMat); wallN.position.set(b.x, yBase + FLOOR_HEIGHT/2, b.z - halfD);
-                    const wallS = new THREE.Mesh(wallGeoTB, wallMat); wallS.position.set(b.x, yBase + FLOOR_HEIGHT/2, b.z + halfD);
-                    const wallE = new THREE.Mesh(wallGeoLR, wallMat); wallE.position.set(b.x + halfW, yBase + FLOOR_HEIGHT/2, b.z);
-                    const wallW = new THREE.Mesh(wallGeoLR, wallMat); wallW.position.set(b.x - halfW, yBase + FLOOR_HEIGHT/2, b.z);
-                    
-                    scene.add(wallN, wallS, wallE, wallW);
-                    objects.push(wallN, wallS, wallE, wallW);
-
-                    // 螺旋階段の実装 (数学的アプローチ)
-                    if (f < b.floors - 1) {
-                        const steps = 16; // 1階層あたりの段数
-                        const radius = 6; // 螺旋の半径
-                        for (let s = 0; s < steps; s++) {
-                            const angle = (s / steps) * Math.PI * 2;
-                            const stepY = yBase + (s / steps) * FLOOR_HEIGHT;
-                            const stepGeo = new THREE.BoxGeometry(4, 1, 4);
-                            const stepMesh = new THREE.Mesh(stepGeo, stairMat);
-                            
-                            stepMesh.position.set(
-                                b.x + Math.cos(angle) * radius,
-                                stepY,
-                                b.z + Math.sin(angle) * radius
-                            );
-                            // 中心を向くように回転
-                            stepMesh.rotation.y = -angle;
-                            scene.add(stepMesh);
-                            objects.push(stepMesh);
-                        }
-                        
-                        // 床に階段用の穴を開ける代わりの簡易表現として、中央の柱を作る
-                        const pillarGeo = new THREE.CylinderGeometry(2, 2, FLOOR_HEIGHT);
-                        const pillar = new THREE.Mesh(pillarGeo, stairMat);
-                        pillar.position.set(b.x, yBase + FLOOR_HEIGHT/2, b.z);
-                        scene.add(pillar);
-                        objects.push(pillar);
-                    }
-                }
+            data.buildings.forEach(b => {
+                createComplexBuilding(b.x, b.z, b.floors, b.w, b.d, b.rooms);
             });
         }
 
-        // ランダムなビルの中にスポーンさせる
-        function spawnEntity(entity, isPlayer = false) {
-            if (spawnPoints.length === 0) return;
-            // ランダムなスポーンポイントを選択し、リストから削除して重複を避ける
-            const index = Math.floor(Math.random() * spawnPoints.length);
-            const pos = spawnPoints.splice(index, 1)[0]; 
-            
-            if (isPlayer) {
-                entity.position.set(pos.x, pos.y + 5, pos.z);
-            } else {
-                entity.position.copy(pos);
+        function createComplexBuilding(x, z, floors, w, d, roomCount) {
+            const floorHeight = 10;
+            const wallMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+            const floorMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            const glassMat = new THREE.MeshLambertMaterial({ color: 0x00aaff, transparent: true, opacity: 0.4 });
+
+            for (let f = 0; f < floors; f++) {
+                const y = f * floorHeight;
+                
+                // 床
+                const fMesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), floorMat);
+                fMesh.position.set(x, y, z);
+                scene.add(fMesh);
+                objects.push(fMesh);
+
+                // 外壁
+                const walls = [
+                    { px: 0, pz: d/2, sw: w, sd: 1 }, // North
+                    { px: 0, pz: -d/2, sw: w, sd: 1 }, // South
+                    { px: w/2, pz: 0, sw: 1, sd: d }, // East
+                    { px: -w/2, pz: 0, sw: 1, sd: d }  // West
+                ];
+
+                walls.forEach((wall, i) => {
+                    // 1階にだけ入り口を作る
+                    if (f === 0 && i === 0) return; 
+
+                    const wMesh = new THREE.Mesh(new THREE.BoxGeometry(wall.sw, floorHeight, wall.sd), wallMat);
+                    wMesh.position.set(x + wall.px, y + floorHeight/2, z + wall.pz);
+                    scene.add(wMesh);
+                    objects.push(wMesh);
+                });
+
+                // 内部の部屋仕切り
+                for(let r=0; r<roomCount; r++) {
+                    const partition = new THREE.Mesh(new THREE.BoxGeometry(w/2, floorHeight, 1), wallMat);
+                    partition.position.set(x + (Math.random()-0.5)*w*0.5, y + floorHeight/2, z + (Math.random()-0.5)*d*0.5);
+                    partition.rotation.y = Math.random() > 0.5 ? 0 : Math.PI/2;
+                    scene.add(partition);
+                    objects.push(partition);
+                }
+
+                // 階段 (螺旋状)
+                const stepCount = 10;
+                for(let s=0; s<stepCount; s++) {
+                    const angle = (s / stepCount) * Math.PI * 2;
+                    const step = new THREE.Mesh(new THREE.BoxGeometry(5, 1, 5), wallMat);
+                    step.position.set(x + Math.cos(angle)*5, y + s, z + Math.sin(angle)*5);
+                    scene.add(step);
+                    objects.push(step);
+                }
+
+                // 屋上
+                if (f === floors - 1) {
+                    const roof = new THREE.Mesh(new THREE.BoxGeometry(w, 1, d), wallMat);
+                    roof.position.set(x, y + floorHeight, z);
+                    scene.add(roof);
+                    objects.push(roof);
+                }
             }
         }
 
-        // --- ボットモデリング & AI ---
         function spawnBot(id) {
-            const botGroup = new THREE.Group();
-            botGroup.name = "Bot_" + id;
+            const bot = new THREE.Group();
             
-            // リアルな青色のプロポーション (成人男性風)
-            const skinMat = new THREE.MeshLambertMaterial({ color: 0x0055ff }); // 全身青
-            const gunMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-
-            // 胴体
-            const torsoGeo = new THREE.BoxGeometry(1.8, 2.5, 1);
-            const torso = new THREE.Mesh(torsoGeo, skinMat);
-            torso.position.y = 3.5;
-            botGroup.add(torso);
-
-            // 頭
-            const headGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-            const head = new THREE.Mesh(headGeo, skinMat);
-            head.position.y = 5.5;
-            botGroup.add(head);
-
-            // 腕と銃
-            const armGeo = new THREE.BoxGeometry(0.6, 2.5, 0.6);
-            const armR = new THREE.Mesh(armGeo, skinMat);
-            armR.position.set(1.3, 3.5, 0);
-            const armL = new THREE.Mesh(armGeo, skinMat);
-            armL.position.set(-1.3, 3.5, 0);
+            // 人型モデル作成 (青色成人男性)
+            const mat = new THREE.MeshLambertMaterial({ color: 0x0000ff });
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 1), mat); torso.position.y = 4;
+            const head = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat); head.position.y = 6.5;
+            const armL = new THREE.Mesh(new THREE.BoxGeometry(0.8, 4, 0.8), mat); armL.position.set(-1.5, 4, 0);
+            const armR = new THREE.Mesh(new THREE.BoxGeometry(0.8, 4, 0.8), mat); armR.position.set(1.5, 4, 0);
+            const legL = new THREE.Mesh(new THREE.BoxGeometry(0.9, 4, 0.9), mat); legL.position.set(-0.5, 1, 0);
+            const legR = new THREE.Mesh(new THREE.BoxGeometry(0.9, 4, 0.9), mat); legR.position.set(0.5, 1, 0);
             
-            // 銃を構えているように右腕を前方に
-            armR.rotation.x = Math.PI / 2;
-            armR.position.z = 1;
-            armR.position.y = 4;
-
-            const gunGeo = new THREE.BoxGeometry(0.3, 0.3, 2.5);
-            const gun = new THREE.Mesh(gunGeo, gunMat);
-            gun.position.set(1.3, 4, 2); // 右手の先に配置
+            // 銃
+            const gun = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 3), new THREE.MeshLambertMaterial({color: 0x111111}));
+            gun.position.set(1.5, 4.5, 1.5);
             
-            botGroup.add(armR, armL, gun);
-
-            // 脚
-            const legGeo = new THREE.BoxGeometry(0.7, 2.5, 0.7);
-            const legR = new THREE.Mesh(legGeo, skinMat);
-            legR.position.set(0.5, 1.25, 0);
-            const legL = new THREE.Mesh(legGeo, skinMat);
-            legL.position.set(-0.5, 1.25, 0);
-            botGroup.add(legR, legL);
-
-            botGroup.userData = {
-                hp: botConfig ? botConfig.hp : 100,
-                isDead: false,
-                lastShot: 0,
-                state: 'roam', // 'roam' または 'attack'
-                targetDir: new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize(),
-                lastRoamChange: 0
-            };
-
-            spawnEntity(botGroup, false);
-            scene.add(botGroup);
-            bots.push(botGroup);
+            bot.add(torso, head, armL, armR, legL, legR, gun);
+            
+            // 建物の中にランダムスポーン
+            bot.position.set((Math.random()-0.5)*400, 2, (Math.random()-0.5)*400);
+            bot.userData = { hp: 100, lastShot: 0, state: 'hunt' };
+            
+            scene.add(bot);
+            bots.push(bot);
         }
 
-        // ボットのAIロジック (FFA & 徘徊)
-        function updateBots(delta, time) {
-            if(!botConfig) return;
+        // --- 衝突判定システム ---
+        function checkCollision(pos, radius) {
+            const directions = [
+                new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0),
+                new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
+                new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 1, 0)
+            ];
+            
+            for (let d of directions) {
+                raycaster.set(pos, d);
+                const intersects = raycaster.intersectObjects(objects);
+                if (intersects.length > 0 && intersects[0].distance < radius) {
+                    return intersects[0];
+                }
+            }
+            return null;
+        }
 
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!isGameRunning) return;
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+
+            // プレイヤーの移動
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+            velocity.y -= 9.8 * 50.0 * delta; 
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
+            if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+
+            // 壁と床の当たり判定を適用
+            const nextPos = camera.position.clone();
+            nextPos.x += -velocity.x * delta;
+            nextPos.z += -velocity.z * delta;
+
+            // 水平方向の衝突
+            if (!checkCollision(nextPos, PLAYER_RADIUS)) {
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+            }
+
+            // 垂直方向 (地面・階段・天井)
+            camera.position.y += (velocity.y * delta);
+            const groundHit = checkCollision(camera.position, 5.0); // 目の高さ分
+            if (groundHit && velocity.y < 0) {
+                velocity.y = 0;
+                camera.position.y = groundHit.point.y + 5.0;
+                canJump = true;
+            }
+
+            if (camera.position.y < -10) camera.position.set(0, 50, 0); // 落下救済
+
+            updateBots(time, delta);
+            prevTime = time;
+            renderer.render(scene, camera);
+        }
+
+        function updateBots(time, delta) {
             bots.forEach(bot => {
-                if(bot.userData.isDead) return;
+                if (bot.userData.hp <= 0) return;
 
-                let closestEnemy = null;
-                let minDistance = botConfig.visionRange;
-
-                // 1. 索敵 (プレイヤーと他のボット全員をチェック)
-                const enemies = [...bots.filter(b => b !== bot && !b.userData.isDead), { position: camera.position, isPlayer: true }];
+                const dist = bot.position.distanceTo(camera.position);
                 
-                enemies.forEach(enemy => {
-                    const dist = bot.position.distanceTo(enemy.position);
-                    if (dist < minDistance) {
-                        // 視線チェック (壁越しに見えないようにする)
-                        const dirToEnemy = new THREE.Vector3().subVectors(enemy.position, bot.position).normalize();
-                        visionRaycaster.set(bot.position.clone().setY(5), dirToEnemy);
-                        const intersects = visionRaycaster.intersectObjects(objects); // 壁のみチェック
-                        
-                        // 障害物がない、または障害物より敵が近い場合は視認可能
-                        if (intersects.length === 0 || intersects[0].distance > dist) {
-                            minDistance = dist;
-                            closestEnemy = enemy;
-                        }
-                    }
-                });
-
-                // 2. 行動決定
-                if (closestEnemy) {
-                    bot.userData.state = 'attack';
-                    // 敵の方を向く (Y軸のみ)
-                    bot.lookAt(closestEnemy.position.x, bot.position.y, closestEnemy.position.z);
+                // AIロジック: プレイヤーを追跡・攻撃
+                if (dist < 200) {
+                    bot.lookAt(camera.position.x, bot.position.y, camera.position.z);
                     
-                    // 近づく
-                    if(minDistance > 20) {
-                        bot.translateZ(botConfig.speed * delta);
+                    // 適度に近づく
+                    if (dist > 30) {
+                        bot.translateZ(15 * delta);
                     }
 
                     // 射撃
-                    if(time - bot.userData.lastShot > botConfig.fireRate) {
-                        botShoot(bot, closestEnemy);
+                    if (time - bot.userData.lastShot > 1000) {
+                        botShoot(bot);
                         bot.userData.lastShot = time;
                     }
-                } else {
-                    // 敵がいない場合は徘徊
-                    bot.userData.state = 'roam';
-                    
-                    // 一定時間で方向転換、または壁にぶつかりそうなら方向転換
-                    visionRaycaster.set(bot.position.clone().setY(2), bot.userData.targetDir);
-                    const hitWall = visionRaycaster.intersectObjects(objects);
-
-                    if (time - bot.userData.lastRoamChange > botConfig.roamChangeInterval || (hitWall.length > 0 && hitWall[0].distance < 10)) {
-                        bot.userData.targetDir = new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize();
-                        bot.userData.lastRoamChange = time;
-                    }
-
-                    // 目標方向を向いて歩く
-                    const targetPos = bot.position.clone().add(bot.userData.targetDir);
-                    bot.lookAt(targetPos.x, bot.position.y, targetPos.z);
-                    bot.translateZ((botConfig.speed * 0.5) * delta); // 徘徊時は少し遅い
                 }
             });
         }
 
-        function botShoot(shooter, target) {
-            // ボット同士のダメージ判定、またはプレイヤーへのダメージ
-            if (Math.random() < botConfig.accuracy) {
-                createTracer(shooter.position.clone().setY(5), target.position.clone().setY(5));
-                if (target.isPlayer) {
-                    takeDamage(15);
-                } else {
-                    target.userData.hp -= 20;
-                    if(target.userData.hp <= 0) killBot(target);
+        function botShoot(bot) {
+            // プレイヤーへのヒット判定 (簡易的な確率)
+            if (Math.random() > 0.7) {
+                playerHP -= 10;
+                document.getElementById('hud').innerText = `HP: ${playerHP} | ENEMIES: ${bots.filter(b=>b.userData.hp>0).length}`;
+                document.getElementById('damage-flash').style.opacity = 0.5;
+                setTimeout(() => document.getElementById('damage-flash').style.opacity = 0, 100);
+                
+                if (playerHP <= 0) {
+                    alert("Eliminated in action.");
+                    location.reload();
                 }
             }
         }
 
-        // --- プレイヤーアクション ---
         function shoot() {
-            if(!isGameActive) return;
-
+            if (!isGameRunning) return;
+            
             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const hitBots = bots.filter(b => b.userData.hp > 0);
             
-            const hitTargets = [...objects];
-            bots.forEach(b => { if(!b.userData.isDead) hitTargets.push(...b.children); });
-
-            const intersects = raycaster.intersectObjects(hitTargets);
+            // ボットの全部品を判定対象に
+            let allBotParts = [];
+            hitBots.forEach(b => allBotParts.push(...b.children));
             
-            // 弾道エフェクト
-            let targetPoint = raycaster.ray.direction.clone().multiplyScalar(1000).add(camera.position);
-            if(intersects.length > 0) targetPoint = intersects[0].point;
-            createTracer(camera.position.clone().setY(camera.position.y - 1), targetPoint);
-
+            const intersects = raycaster.intersectObjects(allBotParts);
+            
             if (intersects.length > 0) {
-                const hitObj = intersects[0].object;
-                if(hitObj.parent && hitObj.parent.name.startsWith("Bot_")) {
-                    const bot = hitObj.parent;
-                    bot.userData.hp -= 35; // プレイヤーの攻撃力
-                    
-                    const marker = document.getElementById('hit-marker');
-                    marker.style.display = 'block';
-                    setTimeout(() => marker.style.display = 'none', 100);
-
-                    if(bot.userData.hp <= 0) killBot(bot);
+                const hitPart = intersects[0].object;
+                const targetBot = hitPart.parent;
+                targetBot.userData.hp -= 40;
+                
+                if (targetBot.userData.hp <= 0) {
+                    targetBot.rotation.x = Math.PI / 2;
+                    targetBot.position.y = 1;
+                    document.getElementById('hud').innerText = `HP: ${playerHP} | ENEMIES: ${bots.filter(b=>b.userData.hp>0).length}`;
                 }
             }
         }
 
-        function createTracer(start, end) {
-            const material = new THREE.LineBasicMaterial({ color: 0xffffaa });
-            const points = [start, end];
-            const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            const line = new THREE.Line(geometry, material);
-            scene.add(line);
-            setTimeout(() => scene.remove(line), 50);
-        }
-
-        function takeDamage(amount) {
-            playerHP -= amount;
-            document.getElementById('hp-val').innerText = playerHP;
-            
-            const overlay = document.getElementById('damage-overlay');
-            overlay.style.opacity = 1;
-            setTimeout(() => overlay.style.opacity = 0, 150);
-
-            if(playerHP <= 0) {
-                alert("You Died. Game Over.");
-                location.reload();
-            }
-        }
-
-        function killBot(bot) {
-            bot.userData.isDead = true;
-            bot.rotation.x = -Math.PI / 2; // 倒れる
-            bot.position.y = 1;
-            updateAliveCount();
-        }
-
-        function updateAliveCount() {
-            const alive = bots.filter(b => !b.userData.isDead).length;
-            document.getElementById('bot-count').innerText = alive;
-            if(alive === 0) {
-                alert("You Survived! All bots eliminated!");
-                location.reload();
-            }
-        }
-
-        // --- 物理演算 & コントロール ---
-        function onKeyDown(event) {
-            switch (event.code) {
-                case 'KeyW': moveForward = true; break;
-                case 'KeyA': moveLeft = true; break;
-                case 'KeyS': moveBackward = true; break;
-                case 'KeyD': moveRight = true; break;
-                case 'Space': if (canJump) velocity.y += 180; canJump = false; break;
-            }
-        }
-
-        function onKeyUp(event) {
-            switch (event.code) {
-                case 'KeyW': moveForward = false; break;
-                case 'KeyA': moveLeft = false; break;
-                case 'KeyS': moveBackward = false; break;
-                case 'KeyD': moveRight = false; break;
+        function handleKey(code, isDown) {
+            switch (code) {
+                case 'KeyW': moveForward = isDown; break;
+                case 'KeyS': moveBackward = isDown; break;
+                case 'KeyA': moveLeft = isDown; break;
+                case 'KeyD': moveRight = isDown; break;
+                case 'Space': if (isDown && canJump) { velocity.y += 150; canJump = false; } break;
             }
         }
 
@@ -444,54 +335,6 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-
-            const time = performance.now();
-            const delta = (time - prevTime) / 1000;
-
-            if (controls.isLocked === true) {
-                // プレイヤーの移動処理
-                velocity.x -= velocity.x * 10.0 * delta;
-                velocity.z -= velocity.z * 10.0 * delta;
-                velocity.y -= 9.8 * 60.0 * delta; // 重力
-
-                direction.z = Number(moveForward) - Number(moveBackward);
-                direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize(); 
-
-                const speed = 400.0;
-                if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
-                if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
-
-                // 当たり判定 (Y軸 - 床と階段)
-                raycaster.set(camera.position, new THREE.Vector3(0, -1, 0));
-                const intersections = raycaster.intersectObjects(objects);
-                const onObject = intersections.length > 0 && intersections[0].distance < 6;
-
-                if (onObject) {
-                    velocity.y = Math.max(0, velocity.y);
-                    canJump = true;
-                    // 階段等に乗った際のY座標補正
-                    camera.position.y = intersections[0].point.y + 5; 
-                }
-
-                controls.moveRight(-velocity.x * delta);
-                controls.moveForward(-velocity.z * delta);
-                controls.getObject().position.y += (velocity.y * delta);
-
-                // マップ外落下防止
-                if (camera.position.y < -50) {
-                    takeDamage(100);
-                }
-                
-                updateBots(delta, time);
-            }
-
-            renderer.render(scene, camera);
-            prevTime = time;
         }
     </script>
 </body>
