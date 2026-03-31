@@ -1,13 +1,25 @@
 {
-  "name": "The Aim - Main Arena",
-  "structures": [
-    { "type": "floor", "x": 0, "y": -0.5, "z": 0, "w": 200, "h": 1, "d": 200, "color": "0x333333" },
-    { "type": "wall", "x": 0, "y": 10, "z": -30, "w": 40, "h": 20, "d": 2, "color": "0x666666" },
-    { "type": "wall", "x": -20, "y": 10, "z": -10, "w": 2, "h": 20, "d": 40, "color": "0x666666" },
-    { "type": "glass", "x": 20, "y": 10, "z": -10, "w": 2, "h": 20, "d": 40, "color": "0x00aaff", "opacity": 0.4 },
-    { "type": "box", "x": 10, "y": 2, "z": 10, "w": 4, "h": 4, "d": 4, "color": "0x884400" },
-    { "type": "stair", "x": -10, "y": 0.5, "z": 15, "w": 10, "h": 1, "d": 2, "color": "0x444444" },
-    { "type": "stair", "x": -10, "y": 1.5, "z": 17, "w": 10, "h": 1, "d": 2, "color": "0x444444" },
-    { "type": "stair", "x": -10, "y": 2.5, "z": 19, "w": 10, "h": 1, "d": 2, "color": "0x444444" }
+  "worldSize": 600,
+  "buildings": [
+    { "type": "skyscraper", "x": 0, "z": 0, "floors": 15, "width": 40, "depth": 40 },
+    { "type": "skyscraper", "x": 100, "z": -80, "floors": 12, "width": 30, "depth": 30 },
+    { "type": "skyscraper", "x": -120, "z": 100, "floors": 10, "width": 35, "depth": 35 },
+    { "type": "skyscraper", "x": 150, "z": 150, "floors": 14, "width": 45, "depth": 45 },
+    { "type": "house", "x": 50, "z": 80, "floors": 2, "width": 20, "depth": 20 },
+    { "type": "house", "x": -60, "z": -50, "floors": 3, "width": 25, "depth": 25 },
+    { "type": "house", "x": -150, "z": -150, "floors": 2, "width": 20, "depth": 20 },
+    { "type": "house", "x": 200, "z": 0, "floors": 3, "width": 25, "depth": 25 },
+    { "type": "house", "x": -200, "z": 50, "floors": 2, "width": 20, "depth": 20 },
+    { "type": "skyscraper", "x": 80, "z": -200, "floors": 11, "width": 30, "depth": 30 },
+    { "type": "house", "x": 220, "z": -100, "floors": 2, "width": 20, "depth": 20 },
+    { "type": "house", "x": -80, "z": 200, "floors": 4, "width": 25, "depth": 25 },
+    { "type": "house", "x": 250, "z": 180, "floors": 2, "width": 20, "depth": 20 },
+    { "type": "skyscraper", "x": -250, "z": -100, "floors": 10, "width": 35, "depth": 35 },
+    { "type": "house", "x": -30, "z": 250, "floors": 2, "width": 20, "depth": 20 },
+    { "type": "house", "x": 120, "z": 250, "floors": 3, "width": 25, "depth": 25 },
+    { "type": "skyscraper", "x": 250, "z": -250, "floors": 15, "width": 40, "depth": 40 },
+    { "type": "house", "x": -250, "z": 250, "floors": 2, "width": 20, "depth": 20 },
+    { "type": "house", "x": 0, "z": -250, "floors": 3, "width": 25, "depth": 25 },
+    { "type": "house", "x": -280, "z": 0, "floors": 2, "width": 20, "depth": 20 }
   ]
 }
