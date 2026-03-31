@@ -1,0 +1,12 @@
+{
+  "behaviors": {
+    "standard": {
+      "hp": 100,
+      "speed": 12,
+      "visionRange": 150,
+      "fireRate": 800,
+      "accuracy": 0.6,
+      "roamChangeInterval": 3000
+    }
+  }
+}
