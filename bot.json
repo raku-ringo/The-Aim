@@ -1,12 +1,10 @@
 {
-  "behaviors": {
-    "standard": {
-      "hp": 100,
-      "speed": 12,
-      "visionRange": 150,
-      "fireRate": 800,
-      "accuracy": 0.6,
-      "roamChangeInterval": 3000
-    }
+  "ai_profile": {
+    "aggression": 0.8,
+    "search_radius": 200,
+    "stop_distance": 15,
+    "patrol_speed": 8,
+    "combat_speed": 14,
+    "reaction_time": 500
   }
 }
