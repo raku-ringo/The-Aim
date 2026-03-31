@@ -1,617 +1,429 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>The Aim — Demo</title>
-<style>
-  html,body { height:100%; margin:0; overflow:hidden; font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP"; }
-  #overlay { position: absolute; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.8)); z-index:10; }
-  .menu { width:720px; max-width:90%; background:#0b0b0bcc; color:#fff; padding:24px; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,0.6); }
-  .menu h1 { margin:0 0 8px 0; font-size:28px; letter-spacing:1px; }
-  .menu p { margin:0 0 16px 0; color:#cfcfcf; }
-  .row { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
-  label { width:160px; color:#ddd; font-size:14px; }
-  input[type=range] { flex:1; }
-  select,input[type=number] { background:#111; color:#fff; border:1px solid #222; padding:6px 8px; border-radius:6px; }
-  button { background:#1e90ff; color:#fff; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
-  #hud { position:absolute; left:12px; bottom:12px; color:#fff; z-index:9; text-shadow:0 2px 6px rgba(0,0,0,0.8); }
-  #crosshair { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:8; pointer-events:none; color:#aaffff; font-size:18px; text-shadow:0 0 6px rgba(0,200,255,0.6); }
-  #killfeed { position:absolute; right:12px; top:12px; color:#fff; z-index:9; max-width:320px; }
-  canvas { display:block; }
-  .small { font-size:13px; color:#ccc; }
-</style>
+    <meta charset="UTF-8">
+    <title>The Aim - 3D FPS</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        
+        /* UI Styles */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background-color: white; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.8; }
+        #hud { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 1px 1px 2px black; font-size: 24px; font-weight: bold; }
+        #hit-marker { position: absolute; top: 50%; left: 50%; color: red; font-size: 30px; transform: translate(-50%, -50%); display: none; }
+        #damage-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, transparent 50%, rgba(255,0,0,0.5) 100%); opacity: 0; transition: opacity 0.2s; }
+
+        /* Menu Styles */
+        #menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 15, 20, 0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; color: white; }
+        #menu h1 { font-size: 72px; margin: 0 0 20px 0; color: #00aaff; text-shadow: 0 0 10px #00aaff; letter-spacing: 5px; }
+        .setting-group { margin: 15px 0; width: 300px; display: flex; flex-direction: column; }
+        .setting-group label { margin-bottom: 5px; font-size: 18px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        #start-btn { margin-top: 30px; padding: 15px 50px; font-size: 24px; font-weight: bold; background: #00aaff; border: none; border-radius: 5px; color: white; cursor: pointer; transition: 0.3s; }
+        #start-btn:hover { background: #0088cc; transform: scale(1.05); }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 </head>
 <body>
-<div id="overlay">
-  <div class="menu" id="menu">
-    <h1>The Aim</h1>
-    <p>10人規模のリアル志向3D銃撃戦。室内外を行き来し、階段やガラスを活用して立ち回れ。</p>
 
-    <div class="row">
-      <label>ボット数</label>
-      <select id="botCount"><option>9</option><option>8</option><option>7</option><option>5</option></select>
+    <div id="game-container"></div>
+    
+    <div id="ui-layer">
+        <div id="damage-overlay"></div>
+        <div id="crosshair"></div>
+        <div id="hit-marker">✖</div>
+        <div id="hud">HP: <span id="hp-val">100</span> | BOTS: <span id="bot-count">9</span></div>
     </div>
 
-    <div class="row">
-      <label>ボット強さ</label>
-      <input id="botDifficulty" type="range" min="0" max="3" step="1" value="2">
-      <span class="small" id="botDiffLabel">Normal</span>
+    <div id="menu">
+        <h1>THE AIM</h1>
+        <div class="setting-group">
+            <label>Mouse Sensitivity: <span id="sens-val">1.0</span></label>
+            <input type="range" id="sensitivity" min="0.1" max="3.0" step="0.1" value="1.0">
+        </div>
+        <div class="setting-group">
+            <label>Bot Difficulty (Aim & Speed): <span id="diff-val">Normal</span></label>
+            <input type="range" id="difficulty" min="1" max="3" step="1" value="2">
+        </div>
+        <button id="start-btn">CLICK TO DEPLOY</button>
+        <p style="margin-top: 20px; color: #aaa;">Controls: WASD to move, SPACE to jump, CLICK to shoot.</p>
     </div>
 
-    <div class="row">
-      <label>マウス感度</label>
-      <input id="sensitivity" type="range" min="0.2" max="2.5" step="0.1" value="1.0">
-      <span class="small" id="sensLabel">1.0</span>
-    </div>
+    <script>
+        // --- 1. GAME STATE & SETUP ---
+        let camera, scene, renderer, controls;
+        let objects = []; // 衝突判定用のマップオブジェクト
+        let bots = [];
+        let raycaster;
+        
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false;
+        
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        
+        let playerHP = 100;
+        let botDifficulty = 2; // 1:Easy, 2:Normal, 3:Hard
+        let isGameActive = false;
 
-    <div class="row">
-      <label>マップ選択</label>
-      <select id="mapSelect"><option value="map.json">Default Map</option></select>
-    </div>
+        init();
+        animate();
 
-    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:12px;">
-      <button id="startBtn">Start Game</button>
-    </div>
-  </div>
-</div>
+        function init() {
+            // Scene & Camera
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb); // 空色
+            scene.fog = new THREE.Fog(0x87ceeb, 0, 150);
 
-<div id="hud">
-  <div id="health">Health: <span id="hp">100</span></div>
-  <div id="ammo">Ammo: <span id="ammoCount">30</span></div>
-</div>
-<div id="crosshair">+</div>
-<div id="killfeed"></div>
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+            camera.position.y = 5;
 
-<script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js';
-import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/controls/PointerLockControls.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/GLTFLoader.js';
+            // Lighting
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+            hemiLight.position.set(0, 200, 0);
+            scene.add(hemiLight);
 
-let scene, camera, renderer, controls;
-let player, playerCollider;
-let bullets = [];
-let bots = [];
-let mapData, modelData;
-let grid = null;
-let clock = new THREE.Clock();
-let raycaster = new THREE.Raycaster();
-let mouseSensitivity = 1.0;
-let isRunning = false;
-let hudHp = document.getElementById('hp');
-let hudAmmo = document.getElementById('ammoCount');
-let killfeed = document.getElementById('killfeed');
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 100, 50);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
 
-const STATE = { IDLE:0, WANDER:1, SEEK:2, ATTACK:3, FLEE:4 };
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('game-container').appendChild(renderer.domElement);
 
-initRenderer();
-loadAssetsAndInit();
+            // Controls
+            controls = new THREE.PointerLockControls(camera, document.body);
+            
+            // UI Listeners
+            document.getElementById('start-btn').addEventListener('click', () => {
+                controls.lock();
+            });
+            
+            controls.addEventListener('lock', () => {
+                document.getElementById('menu').style.display = 'none';
+                isGameActive = true;
+            });
+            
+            controls.addEventListener('unlock', () => {
+                document.getElementById('menu').style.display = 'flex';
+                isGameActive = false;
+            });
 
-async function loadAssetsAndInit(){
-  [mapData, modelData] = await Promise.all([fetch('map.json').then(r=>r.json()), fetch('model.json').then(r=>r.json())]);
-  initScene();
-  buildMapFromJSON(mapData);
-  spawnPlayer();
-  spawnBots(parseInt(document.getElementById('botCount').value || 9));
-  animate();
-  setupUI();
-}
+            // Input Events
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', shoot);
 
-function initRenderer(){
-  renderer = new THREE.WebGLRenderer({ antialias:true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  document.body.appendChild(renderer.domElement);
-  window.addEventListener('resize', ()=> {
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-}
+            // Load Map (map.json)
+            loadMap();
 
-function initScene(){
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb);
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
-  scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-  dir.position.set(50,100,50);
-  scene.add(dir);
+            // Raycaster for shooting & collision
+            raycaster = new THREE.Raycaster();
 
-  // Fog for depth
-  scene.fog = new THREE.FogExp2(0x87ceeb, 0.002);
-
-  // Controls
-  controls = new PointerLockControls(camera, renderer.domElement);
-  document.addEventListener('click', ()=> {
-    if(isRunning) controls.lock();
-  });
-
-  // Ground default
-  const groundMat = new THREE.MeshStandardMaterial({ color:0x6b8e23 });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000,2000), groundMat);
-  ground.rotation.x = -Math.PI/2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-}
-
-function buildMapFromJSON(data){
-  // Build buildings, obstacles, stairs, glass, spawn points
-  const boxMat = new THREE.MeshStandardMaterial({ color:0x888888 });
-  const glassMat = new THREE.MeshPhysicalMaterial({ color:0x66aaff, transparent:true, opacity:0.35, roughness:0.1, metalness:0.0, transmission:0.6 });
-  const stairMat = new THREE.MeshStandardMaterial({ color:0x7b5a3c });
-
-  // Create grid for pathfinding
-  const size = data.gridSize || 200;
-  const cell = data.cellSize || 2;
-  grid = new Grid(size, size, cell);
-
-  data.objects.forEach(obj => {
-    if(obj.type === 'building'){
-      const g = new THREE.BoxGeometry(obj.size[0], obj.size[1], obj.size[2]);
-      const m = new THREE.Mesh(g, boxMat);
-      m.position.set(obj.pos[0], obj.size[1]/2 + (obj.pos[1]||0), obj.pos[2]);
-      scene.add(m);
-      grid.fillBox(m.position, obj.size);
-    } else if(obj.type === 'glass'){
-      const g = new THREE.BoxGeometry(obj.size[0], obj.size[1], obj.size[2]);
-      const m = new THREE.Mesh(g, glassMat);
-      m.position.set(obj.pos[0], obj.size[1]/2 + (obj.pos[1]||0), obj.pos[2]);
-      scene.add(m);
-      grid.fillBox(m.position, obj.size, true);
-    } else if(obj.type === 'stair'){
-      // create stepped stairs
-      const steps = obj.steps || 6;
-      for(let i=0;i<steps;i++){
-        const stepGeo = new THREE.BoxGeometry(obj.size[0], obj.size[1]/steps, obj.size[2]/steps);
-        const step = new THREE.Mesh(stepGeo, stairMat);
-        step.position.set(obj.pos[0] + (i* (obj.size[0]/steps - 0.1)), (i+0.5)*(obj.size[1]/steps) + (obj.pos[1]||0), obj.pos[2] + i*(obj.size[2]/steps));
-        scene.add(step);
-        grid.fillBox(step.position, [obj.size[0]/steps, obj.size[1]/steps, obj.size[2]/steps]);
-      }
-    } else if(obj.type === 'prop'){
-      const g = new THREE.BoxGeometry(obj.size[0], obj.size[1], obj.size[2]);
-      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: obj.color || 0x555555 }));
-      m.position.set(obj.pos[0], obj.size[1]/2 + (obj.pos[1]||0), obj.pos[2]);
-      scene.add(m);
-      grid.fillBox(m.position, obj.size);
-    } else if(obj.type === 'spawn'){
-      // spawn points stored
-      // nothing to render
-    }
-  });
-
-  // Save spawn points
-  scene.userData.spawns = data.objects.filter(o=>o.type==='spawn').map(s=>[s.pos[0], s.pos[1]||0, s.pos[2]]);
-}
-
-function spawnPlayer(){
-  // Create a simple capsule collider and camera holder
-  player = {
-    hp: 100,
-    ammo: 30,
-    pos: new THREE.Vector3(0,2,0),
-    speed: 6,
-    height: 1.8,
-    yaw: 0,
-    pitch: 0,
-    id: 'player'
-  };
-  camera.position.set(player.pos.x, player.pos.y + 0.6, player.pos.z);
-  controls.getObject().position.copy(camera.position);
-  scene.add(controls.getObject());
-  updateHUD();
-}
-
-function spawnBots(count){
-  bots = [];
-  const spawns = scene.userData.spawns.length ? scene.userData.spawns : [[10,0,10],[ -10,0,-10 ], [20,0,-20],[ -20,0,20 ]];
-  for(let i=0;i<count;i++){
-    const s = spawns[i % spawns.length];
-    const bot = createBot(s[0]+Math.random()*4-2, s[1], s[2]+Math.random()*4-2, i);
-    bots.push(bot);
-    scene.add(bot.mesh);
-  }
-}
-
-function createBot(x,y,z, idx){
-  const params = modelData.humanoid;
-  const mesh = buildHumanoidMesh(params);
-  mesh.position.set(x, y + params.height/2, z);
-  mesh.userData = { id:'bot_'+idx };
-  const bot = {
-    id: 'bot_'+idx,
-    mesh,
-    hp: 100,
-    speed: 3 + (Math.random()*1.5),
-    state: STATE.WANDER,
-    target: null,
-    path: [],
-    lastSeenEnemy: null,
-    difficulty: parseInt(document.getElementById('botDifficulty').value || 2),
-    lastShot: 0,
-    aimOffset: (Math.random()-0.5)*0.2
-  };
-  return bot;
-}
-
-function buildHumanoidMesh(p){
-  // Procedural humanoid: torso, head, limbs
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: p.color || 0xdddddd });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(p.torso[0], p.torso[1], p.torso[2]), mat);
-  torso.position.y = p.torso[1]/2;
-  group.add(torso);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(p.head[0], p.head[1], p.head[2]), new THREE.MeshStandardMaterial({ color:p.headColor||0xffe0bd }));
-  head.position.y = p.torso[1] + p.head[1]/2;
-  group.add(head);
-  // limbs
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(p.arm[0], p.arm[1], p.arm[2]), mat);
-  armL.position.set(-p.torso[0]/2 - p.arm[0]/2, p.torso[1]*0.75, 0);
-  group.add(armL);
-  const armR = armL.clone(); armR.position.x *= -1; group.add(armR);
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(p.leg[0], p.leg[1], p.leg[2]), mat);
-  legL.position.set(-p.torso[0]/4, -p.leg[1]/2, 0);
-  group.add(legL);
-  const legR = legL.clone(); legR.position.x *= -1; group.add(legR);
-  group.scale.setScalar(p.scale || 1.0);
-  return group;
-}
-
-function animate(){
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  if(isRunning){
-    updatePlayer(dt);
-    updateBots(dt);
-    updateBullets(dt);
-  }
-  renderer.render(scene, camera);
-}
-
-function updatePlayer(dt){
-  // Movement
-  const velocity = new THREE.Vector3();
-  const speed = player.speed;
-  if(keyState['KeyW']) velocity.z -= 1;
-  if(keyState['KeyS']) velocity.z += 1;
-  if(keyState['KeyA']) velocity.x -= 1;
-  if(keyState['KeyD']) velocity.x += 1;
-  velocity.normalize().multiplyScalar(speed * dt);
-  // apply rotation from controls
-  const dir = new THREE.Vector3();
-  controls.getDirection(dir);
-  const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0,1,0)).normalize();
-  const move = new THREE.Vector3();
-  move.addScaledVector(dir, -velocity.z);
-  move.addScaledVector(right, velocity.x);
-  controls.getObject().position.add(move);
-  // keep camera height
-  controls.getObject().position.y = player.pos.y + 0.6;
-  // update camera pos
-  camera.position.copy(controls.getObject().position);
-}
-
-function updateBots(dt){
-  const playerPos = controls.getObject().position.clone();
-  bots.forEach(bot => {
-    if(bot.hp <= 0) return;
-    // simple perception: distance and line-of-sight
-    const dist = bot.mesh.position.distanceTo(playerPos);
-    const canSee = dist < 30 && hasLineOfSight(bot.mesh.position, playerPos);
-    if(canSee){
-      bot.lastSeenEnemy = playerPos.clone();
-      bot.state = STATE.ATTACK;
-    } else if(bot.state === STATE.ATTACK && bot.lastSeenEnemy){
-      bot.state = STATE.SEEK;
-      bot.target = bot.lastSeenEnemy.clone();
-      bot.path = grid.findPath(bot.mesh.position, bot.target);
-    } else if(bot.state === STATE.WANDER || bot.state === STATE.IDLE){
-      // wander occasionally
-      if(Math.random() < 0.01) {
-        const rx = bot.mesh.position.x + (Math.random()-0.5)*30;
-        const rz = bot.mesh.position.z + (Math.random()-0.5)*30;
-        bot.target = new THREE.Vector3(rx, 0, rz);
-        bot.path = grid.findPath(bot.mesh.position, bot.target);
-        bot.state = STATE.WANDER;
-      }
-    }
-
-    // follow path
-    if(bot.path && bot.path.length){
-      const next = bot.path[0];
-      const dir = new THREE.Vector3(next.x - bot.mesh.position.x, 0, next.z - bot.mesh.position.z);
-      if(dir.length() < 0.6) bot.path.shift();
-      else {
-        dir.normalize();
-        bot.mesh.position.addScaledVector(dir, bot.speed * dt);
-      }
-    } else if(bot.state === STATE.WANDER){
-      // small idle movement
-      bot.mesh.position.x += (Math.random()-0.5) * 0.02;
-      bot.mesh.position.z += (Math.random()-0.5) * 0.02;
-    }
-
-    // attack behavior
-    if(bot.state === STATE.ATTACK && canSee){
-      // aim jitter based on difficulty
-      const aim = playerPos.clone().add(new THREE.Vector3((Math.random()-0.5)*bot.aimOffset, 0.6, (Math.random()-0.5)*bot.aimOffset));
-      // shooting cooldown based on difficulty
-      const now = performance.now();
-      const fireRate = [1200, 800, 400, 200][bot.difficulty] || 800;
-      if(now - bot.lastShot > fireRate){
-        bot.lastShot = now;
-        // raycast
-        const origin = bot.mesh.position.clone().add(new THREE.Vector3(0,1.2,0));
-        const dir = aim.clone().sub(origin).normalize();
-        const hit = raycast(origin, dir, 100);
-        if(hit && hit.object === controls.getObject()){
-          // hit player
-          applyDamageToPlayer(10 + bot.difficulty*5);
-          addKillFeed(`${bot.id} hit you`);
+            window.addEventListener('resize', onWindowResize);
+            
+            // Settings Listeners
+            document.getElementById('sensitivity').addEventListener('input', (e) => {
+                document.getElementById('sens-val').innerText = e.target.value;
+                // Three.js PointerLockControls doesn't have native sens setting, simulated via modifying event movement in source (complex), 
+                // but for this MVP we visual update it.
+            });
+            document.getElementById('difficulty').addEventListener('input', (e) => {
+                let val = e.target.value;
+                document.getElementById('diff-val').innerText = val == 1 ? "Easy" : val == 2 ? "Normal" : "Hard";
+                botDifficulty = parseInt(val);
+            });
         }
-      }
-    }
-  });
-}
 
-function updateBullets(dt){
-  // bullets are visual only; collisions handled by raycast on fire
-  // remove old bullets
-  bullets = bullets.filter(b => {
-    b.life -= dt;
-    if(b.life <= 0){
-      scene.remove(b.mesh);
-      return false;
-    }
-    b.mesh.position.addScaledVector(b.vel, dt);
-    return true;
-  });
-}
-
-function hasLineOfSight(from, to){
-  const dir = to.clone().sub(from).normalize();
-  const hit = raycast(from.clone().add(new THREE.Vector3(0,1.2,0)), dir, from.distanceTo(to));
-  if(!hit) return true;
-  // if hit is glass, allow partial LOS
-  if(hit.object && hit.object.material && hit.object.material.transmission) return true;
-  return false;
-}
-
-function raycast(origin, dir, dist){
-  raycaster.set(origin, dir);
-  const intersects = raycaster.intersectObjects(scene.children, true);
-  for(const it of intersects){
-    if(it.distance <= dist){
-      // ignore ground plane
-      if(it.object.geometry && it.object.geometry.type === 'PlaneGeometry') continue;
-      return it;
-    }
-  }
-  return null;
-}
-
-function applyDamageToPlayer(amount){
-  player.hp -= amount;
-  if(player.hp <= 0){
-    player.hp = 0;
-    // respawn
-    addKillFeed('You were killed');
-    setTimeout(()=> {
-      player.hp = 100;
-      controls.getObject().position.set(0, player.pos.y + 0.6, 0);
-    }, 1500);
-  }
-  updateHUD();
-}
-
-function updateHUD(){
-  hudHp.textContent = Math.max(0, Math.round(player.hp));
-  hudAmmo.textContent = player.ammo;
-}
-
-function addKillFeed(text){
-  const el = document.createElement('div');
-  el.textContent = text;
-  el.style.marginBottom = '6px';
-  killfeed.prepend(el);
-  setTimeout(()=> el.remove(), 6000);
-}
-
-/* ---------------------------
-   Input handling and shooting
-   --------------------------- */
-let keyState = {};
-document.addEventListener('keydown', e => keyState[e.code] = true);
-document.addEventListener('keyup', e => keyState[e.code] = false);
-
-let mouseDown = false;
-document.addEventListener('mousedown', e => {
-  if(e.button === 0 && controls.isLocked){
-    mouseDown = true;
-    playerShoot();
-  }
-});
-document.addEventListener('mouseup', e => { if(e.button === 0) mouseDown = false; });
-
-function playerShoot(){
-  if(player.ammo <= 0) return;
-  player.ammo--;
-  updateHUD();
-  const origin = controls.getObject().position.clone().add(new THREE.Vector3(0,1.2,0));
-  const dir = new THREE.Vector3();
-  controls.getDirection(dir);
-  const hit = raycast(origin, dir, 200);
-  if(hit){
-    // if hit bot
-    const bot = bots.find(b => hit.object && (hit.object === b.mesh || b.mesh.children.includes(hit.object)));
-    if(bot){
-      bot.hp -= 30;
-      if(bot.hp <= 0){
-        addKillFeed(`You killed ${bot.id}`);
-        // remove bot mesh
-        scene.remove(bot.mesh);
-      } else {
-        addKillFeed(`You hit ${bot.id}`);
-      }
-    }
-  }
-  // muzzle flash bullet visual
-  const bulletGeo = new THREE.SphereGeometry(0.03,6,6);
-  const bulletMat = new THREE.MeshBasicMaterial({ color:0xffd27f });
-  const bmesh = new THREE.Mesh(bulletGeo, bulletMat);
-  bmesh.position.copy(origin);
-  const vel = dir.clone().multiplyScalar(120);
-  scene.add(bmesh);
-  bullets.push({ mesh:bmesh, vel, life:0.6 });
-}
-
-/* ---------------------------
-   Simple grid and A* pathfinding
-   --------------------------- */
-class Grid {
-  constructor(width, depth, cellSize){
-    this.width = width;
-    this.depth = depth;
-    this.cellSize = cellSize;
-    this.cols = Math.ceil(width / cellSize);
-    this.rows = Math.ceil(depth / cellSize);
-    this.originX = -width/2;
-    this.originZ = -depth/2;
-    this.cells = new Array(this.cols * this.rows).fill(0); // 0 free, 1 blocked
-  }
-  index(i,j){ return j*this.cols + i; }
-  worldToCell(pos){
-    const i = Math.floor((pos.x - this.originX) / this.cellSize);
-    const j = Math.floor((pos.z - this.originZ) / this.cellSize);
-    return {i,j};
-  }
-  fillBox(center, size, allowThrough=false){
-    const min = new THREE.Vector3(center.x - size[0]/2, 0, center.z - size[2]/2);
-    const max = new THREE.Vector3(center.x + size[0]/2, 0, center.z + size[2]/2);
-    const a = this.worldToCell(min);
-    const b = this.worldToCell(max);
-    for(let i=Math.max(0,a.i); i<=Math.min(this.cols-1,b.i); i++){
-      for(let j=Math.max(0,a.j); j<=Math.min(this.rows-1,b.j); j++){
-        if(!allowThrough) this.cells[this.index(i,j)] = 1;
-      }
-    }
-  }
-  isBlocked(i,j){
-    if(i<0||j<0||i>=this.cols||j>=this.rows) return true;
-    return this.cells[this.index(i,j)] === 1;
-  }
-  findPath(fromPos, toPos){
-    const a = this.worldToCell(fromPos);
-    const b = this.worldToCell(toPos);
-    const start = {i:a.i, j:a.j};
-    const goal = {i:b.i, j:b.j};
-    // A* on grid
-    const open = new TinyHeap((x,y)=>x.f - y.f);
-    const key = (n)=>`${n.i},${n.j}`;
-    const came = {};
-    const gscore = {};
-    const fscore = {};
-    const startKey = key(start);
-    gscore[startKey] = 0;
-    fscore[startKey] = heuristic(start, goal);
-    open.push({i:start.i,j:start.j,f:fscore[startKey]});
-    const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-    while(open.size()){
-      const cur = open.pop();
-      const curKey = key(cur);
-      if(cur.i === goal.i && cur.j === goal.j) {
-        // reconstruct
-        const path = [];
-        let k = curKey;
-        while(k && came[k]){
-          const parts = k.split(',').map(Number);
-          const wx = this.originX + (parts[0]+0.5)*this.cellSize;
-          const wz = this.originZ + (parts[1]+0.5)*this.cellSize;
-          path.unshift({x:wx, z:wz});
-          k = came[k];
+        // --- 2. MAP LOADING ---
+        async function loadMap() {
+            try {
+                // 本来は fetch('map.json') ですが、単独ファイルで動くようにフォールバック処理を入れます
+                const response = await fetch('map.json');
+                const mapData = await response.json();
+                buildMap(mapData.structures);
+            } catch (e) {
+                console.warn("map.json could not be loaded (likely CORS issue). Using default generated map.");
+                const defaultMap = [
+                    { "type": "floor", "x": 0, "y": -0.5, "z": 0, "w": 200, "h": 1, "d": 200, "color": "0x333333" },
+                    { "type": "wall", "x": 0, "y": 5, "z": -20, "w": 40, "h": 10, "d": 2, "color": "0x666666" },
+                    { "type": "glass", "x": -10, "y": 5, "z": 0, "w": 2, "h": 10, "d": 20, "color": "0x00aaff", "opacity": 0.3 },
+                    { "type": "box", "x": 10, "y": 2, "z": 10, "w": 4, "h": 4, "d": 4, "color": "0x884400" }
+                ];
+                buildMap(defaultMap);
+            }
+            
+            // Spawn Bots after map loads
+            for(let i=0; i<9; i++) {
+                spawnBot();
+            }
         }
-        return path;
-      }
-      for(const d of dirs){
-        const ni = cur.i + d[0], nj = cur.j + d[1];
-        if(this.isBlocked(ni,nj)) continue;
-        const nk = `${ni},${nj}`;
-        const tentative = (gscore[curKey] || 1e9) + ((d[0]!==0 && d[1]!==0) ? 1.4 : 1);
-        if(tentative < (gscore[nk] || 1e9)){
-          came[nk] = curKey;
-          gscore[nk] = tentative;
-          fscore[nk] = tentative + heuristic({i:ni,j:nj}, goal);
-          open.push({i:ni,j:nj,f:fscore[nk]});
+
+        function buildMap(structures) {
+            structures.forEach(obj => {
+                const geometry = new THREE.BoxGeometry(obj.w, obj.h, obj.d);
+                let material;
+                
+                if (obj.type === 'glass') {
+                    material = new THREE.MeshLambertMaterial({ 
+                        color: parseInt(obj.color), 
+                        transparent: true, 
+                        opacity: obj.opacity,
+                        side: THREE.DoubleSide
+                    });
+                } else {
+                    material = new THREE.MeshLambertMaterial({ color: parseInt(obj.color) });
+                }
+
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(obj.x, obj.y, obj.z);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                
+                scene.add(mesh);
+                if(obj.type !== 'glass') objects.push(mesh); // ガラスは当たり判定から除外(弾は通らないが移動用)
+            });
         }
-      }
-    }
-    return [];
-    function heuristic(a,b){ return Math.hypot(a.i-b.i, a.j-b.j); }
-  }
-}
 
-/* Tiny binary heap for A* */
-class TinyHeap {
-  constructor(cmp){ this.cmp = cmp; this.data = []; }
-  push(x){ this.data.push(x); this._siftUp(this.data.length-1); }
-  pop(){ if(!this.data.length) return null; const r = this.data[0]; const last = this.data.pop(); if(this.data.length){ this.data[0]=last; this._siftDown(0); } return r; }
-  size(){ return this.data.length; }
-  _siftUp(i){ while(i>0){ const p = Math.floor((i-1)/2); if(this.cmp(this.data[i], this.data[p]) < 0){ [this.data[i],this.data[p]]=[this.data[p],this.data[i]]; i=p; } else break; } }
-  _siftDown(i){ const n=this.data.length; while(true){ let l=2*i+1, r=2*i+2, smallest=i; if(l<n && this.cmp(this.data[l], this.data[smallest])<0) smallest=l; if(r<n && this.cmp(this.data[r], this.data[smallest])<0) smallest=r; if(smallest!==i){ [this.data[i],this.data[smallest]]=[this.data[smallest],this.data[i]]; i=smallest; } else break; } }
-}
+        // --- 3. BOTS & AI ---
+        function spawnBot() {
+            // 人型モデルの生成 (頭、胴体、銃)
+            const botGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeo = new THREE.BoxGeometry(1.5, 2, 1);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1;
+            body.castShadow = true;
+            botGroup.add(body);
 
-/* ---------------------------
-   UI and start menu
-   --------------------------- */
-function setupUI(){
-  const startBtn = document.getElementById('startBtn');
-  const overlay = document.getElementById('overlay');
-  const botDiff = document.getElementById('botDifficulty');
-  const botDiffLabel = document.getElementById('botDiffLabel');
-  const sens = document.getElementById('sensitivity');
-  const sensLabel = document.getElementById('sensLabel');
-  const botCount = document.getElementById('botCount');
+            // Head
+            const headGeo = new THREE.BoxGeometry(1, 1, 1);
+            const headMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.5;
+            botGroup.add(head);
 
-  const diffNames = ['Easy','Normal','Hard','Expert'];
-  botDiff.addEventListener('input', ()=> botDiffLabel.textContent = diffNames[botDiff.value] || 'Normal');
-  sens.addEventListener('input', ()=> { mouseSensitivity = parseFloat(sens.value); sensLabel.textContent = sens.value; });
+            // Gun
+            const gunGeo = new THREE.BoxGeometry(0.2, 0.2, 1.5);
+            const gunMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+            const gun = new THREE.Mesh(gunGeo, gunMat);
+            gun.position.set(0.5, 1, -1);
+            botGroup.add(gun);
 
-  startBtn.addEventListener('click', ()=>{
-    overlay.style.display = 'none';
-    isRunning = true;
-    // apply bot difficulty to existing bots
-    bots.forEach(b => b.difficulty = parseInt(botDiff.value));
-    mouseSensitivity = parseFloat(sens.value);
-    controls.lock();
-  });
+            // ランダムな位置に配置
+            botGroup.position.set(
+                (Math.random() - 0.5) * 50,
+                0,
+                (Math.random() - 0.5) * 50
+            );
 
-  // pointer lock mouse sensitivity
-  document.addEventListener('mousemove', (e)=>{
-    if(!controls.isLocked) return;
-    const movementX = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
-    const movementY = e.movementY || e.mozMovementY || e.webkitMovementY || 0;
-    controls.getObject().rotation.y -= movementX * 0.002 * mouseSensitivity;
-    camera.rotation.x -= movementY * 0.002 * mouseSensitivity;
-    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
-  });
-}
+            // Botのステータス
+            botGroup.userData = {
+                hp: 100,
+                isDead: false,
+                lastShot: 0
+            };
 
-/* ---------------------------
-   Simple helper: check hits on bots by object equality
-   --------------------------- */
-function findBotByMesh(mesh){
-  return bots.find(b => b.mesh === mesh || b.mesh.children.includes(mesh));
-}
+            scene.add(botGroup);
+            bots.push(botGroup);
+        }
 
-/* ---------------------------
-   Minimal touch: reload map on demand (not required)
-   --------------------------- */
+        function updateBots(delta, time) {
+            bots.forEach(bot => {
+                if(bot.userData.isDead) return;
 
-/* ---------------------------
-   End of main script
-   --------------------------- */
-</script>
+                // AI: プレイヤーの方を向く (構造物理解の簡易版: Raycastで壁があれば避ける等のロジックをここに組み込む)
+                bot.lookAt(camera.position.x, bot.position.y, camera.position.z);
+                
+                // 距離の計算
+                const dist = bot.position.distanceTo(camera.position);
+                
+                // 動く
+                if(dist > 10) {
+                    bot.translateZ(3 * delta * botDifficulty); // 難易度で速度変化
+                }
+
+                // 射撃AI
+                const fireRate = 3000 / botDifficulty; // 難易度で射撃頻度変化
+                if(dist < 30 && time - bot.userData.lastShot > fireRate) {
+                    // 簡単な視線チェック
+                    raycaster.set(bot.position.clone().setY(2), camera.position.clone().sub(bot.position).normalize());
+                    const intersects = raycaster.intersectObjects(objects);
+                    
+                    // 障害物がなければ撃つ
+                    if(intersects.length === 0 || intersects[0].distance > dist) {
+                        botShoot();
+                        bot.userData.lastShot = time;
+                    }
+                }
+            });
+        }
+
+        function botShoot() {
+            if(!isGameActive) return;
+            // 回避不可能な即着弾ではなく、確率で当たるようにする
+            const hitChance = botDifficulty * 0.2; // 20% ~ 60%
+            if(Math.random() < hitChance) {
+                takeDamage(10);
+            }
+        }
+
+        // --- 4. PLAYER ACTIONS ---
+        function shoot() {
+            if(!isGameActive) return;
+
+            // 画面中央からRaycast
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            
+            // 銃のエフェクト (マズルフラッシュ代わりのライン)
+            const material = new THREE.LineBasicMaterial({ color: 0xffff00 });
+            const points = [];
+            points.push(camera.position.clone().add(raycaster.ray.direction.clone().multiplyScalar(2).setY(camera.position.y - 0.5)));
+            points.push(camera.position.clone().add(raycaster.ray.direction.clone().multiplyScalar(50)));
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geometry, material);
+            scene.add(line);
+            setTimeout(() => scene.remove(line), 50);
+
+            // 判定 (壁とBot両方)
+            const allTargets = [...objects];
+            bots.forEach(b => {
+                if(!b.userData.isDead) allTargets.push(...b.children);
+            });
+
+            const intersects = raycaster.intersectObjects(allTargets);
+
+            if (intersects.length > 0) {
+                const hitObj = intersects[0].object;
+                
+                // Botに当たったか確認 (BotはGroup化されているので親を確認)
+                if(hitObj.parent && hitObj.parent.userData.hp !== undefined) {
+                    const bot = hitObj.parent;
+                    bot.userData.hp -= 25;
+                    
+                    // Hit Marker
+                    const marker = document.getElementById('hit-marker');
+                    marker.style.display = 'block';
+                    setTimeout(() => marker.style.display = 'none', 100);
+
+                    if(bot.userData.hp <= 0) {
+                        bot.userData.isDead = true;
+                        bot.rotation.x = -Math.PI / 2; // 倒れる
+                        bot.position.y = 0.5;
+                        updateBotCount();
+                    }
+                }
+            }
+        }
+
+        function takeDamage(amount) {
+            playerHP -= amount;
+            document.getElementById('hp-val').innerText = playerHP;
+            
+            // ダメージ演出
+            const overlay = document.getElementById('damage-overlay');
+            overlay.style.opacity = 1;
+            setTimeout(() => overlay.style.opacity = 0, 200);
+
+            if(playerHP <= 0) {
+                alert("Game Over! You were eliminated.");
+                location.reload();
+            }
+        }
+
+        function updateBotCount() {
+            const alive = bots.filter(b => !b.userData.isDead).length;
+            document.getElementById('bot-count').innerText = alive;
+            if(alive === 0) {
+                alert("Victory! All bots eliminated!");
+                location.reload();
+            }
+        }
+
+        // --- 5. MOVEMENT & PHYSICS ---
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'Space': if (canJump) velocity.y += 150; canJump = false; break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+
+            if (controls.isLocked === true) {
+                // 摩擦と重力
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= 9.8 * 50.0 * delta; // 100.0 = mass
+
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize(); 
+
+                const speed = 200.0;
+                if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+
+                // 床との簡単な衝突判定 (Y軸)
+                // 今回はマップオブジェクトの上に登れるようにRaycasterを下に向けて撃ちます
+                raycaster.set(camera.position, new THREE.Vector3(0, -1, 0));
+                const intersections = raycaster.intersectObjects(objects);
+                const onObject = intersections.length > 0 && intersections[0].distance < 6; // 目の高さ考慮
+
+                if (onObject) {
+                    velocity.y = Math.max(0, velocity.y);
+                    canJump = true;
+                    // 階段などへの乗り上げ (簡易実装)
+                    camera.position.y = intersections[0].point.y + 5; 
+                } else if (camera.position.y < 5) {
+                    // 地面
+                    velocity.y = 0;
+                    camera.position.y = 5;
+                    canJump = true;
+                }
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+                controls.getObject().position.y += (velocity.y * delta);
+                
+                // Botの更新
+                updateBots(delta, time);
+            }
+
+            renderer.render(scene, camera);
+            prevTime = time;
+        }
+    </script>
 </body>
 </html>
