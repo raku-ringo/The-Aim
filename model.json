@@ -1,15 +1,8 @@
 {
-  "humanoid": {
-    "scale": 1.0,
-    "height": 1.8,
-    "torso": [0.6, 0.9, 0.3],
-    "head": [0.35, 0.35, 0.35],
-    "headColor": 16755200,
-    "arm": [0.18, 0.7, 0.18],
-    "leg": [0.22, 0.9, 0.22],
-    "color": 4473924
-  },
-  "weapons": {
-    "rifle": { "damage": 30, "fireRate": 0.2, "mag": 30 }
-  }
+  "type": "Humanoid",
+  "parts": [
+    { "name": "head", "shape": "box", "size": [1, 1, 1], "offset": [0, 1.5, 0], "color": "0xffccaa" },
+    { "name": "body", "shape": "box", "size": [1.5, 2, 1], "offset": [0, 0, 0], "color": "0x222222" },
+    { "name": "gun", "shape": "box", "size": [0.2, 0.2, 1.5], "offset": [0.5, 0, -1], "color": "0x111111" }
+  ]
 }
